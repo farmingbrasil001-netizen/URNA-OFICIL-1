@@ -1,0 +1,1063 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Urna Eletrônica Digital - Votação em Tempo Real</title>
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&family=Inter:wght@400;600;700;800&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+
+    <style>
+        .font-urna-digital {
+            font-family: 'Share Tech Mono', monospace;
+        }
+        .font-title {
+            font-family: 'Chakra Petch', sans-serif;
+        }
+        
+        /* 3D Keypad Button Effects */
+        .btn-keypad {
+            transition: all 0.08s ease;
+            box-shadow: 0px 4px 0px rgba(0,0,0,0.4);
+        }
+        .btn-keypad:active {
+            transform: translateY(3px);
+            box-shadow: 0px 1px 0px rgba(0,0,0,0.4);
+        }
+        
+        /* Screen scanlines effect */
+        .urna-screen-overlay {
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.05) 50%);
+            background-size: 100% 4px;
+        }
+
+        /* Pulsing animation for FIM screen */
+        @keyframes pulse-fim {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.05); opacity: 0.9; }
+        }
+        .animate-fim {
+            animation: pulse-fim 1.2s infinite ease-in-out;
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen font-sans flex flex-col justify-between selection:bg-emerald-500 selection:text-slate-900">
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="fixed top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+    <!-- Top Navigation Header -->
+    <header class="bg-slate-950 border-b border-slate-800 sticky top-0 z-40 shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between flex-wrap gap-3">
+            <div class="flex items-center space-x-3 cursor-pointer" onclick="goHome()">
+                <div class="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center text-slate-950 font-black text-xl shadow-lg shadow-emerald-500/20">
+                    <i class="fa-solid font-bold fa-check-double"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg font-bold font-title tracking-wide text-white leading-tight">URNA DIGITAL</h1>
+                    <p class="text-xs text-slate-400">Votação em Tempo Real</p>
+                </div>
+            </div>
+
+            <!-- Navigation Actions -->
+            <div class="flex items-center gap-2">
+                <button onclick="switchTab('urna')" id="nav-btn-urna" class="px-4 py-2 rounded-lg font-semibold text-sm transition flex items-center gap-2 bg-emerald-600 text-white shadow-md">
+                    <i class="fa-solid fa-check-to-slot"></i>
+                    <span>Urna</span>
+                </button>
+                <button onclick="switchTab('criar')" id="nav-btn-criar" class="px-4 py-2 rounded-lg font-semibold text-sm text-slate-300 hover:bg-slate-800 transition flex items-center gap-2">
+                    <i class="fa-solid fa-plus-circle"></i>
+                    <span>Criar Eleição</span>
+                </button>
+                <button onclick="switchTab('resultados')" id="nav-btn-resultados" class="px-4 py-2 rounded-lg font-semibold text-sm text-slate-300 hover:bg-slate-800 transition flex items-center gap-2">
+                    <i class="fa-solid fa-chart-pie"></i>
+                    <span>Resultados</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="max-w-7xl mx-auto px-4 py-6 flex-grow w-full">
+
+        <!-- VIEW 1: URNA ELETRÔNICA VOTING INTERFACE -->
+        <section id="view-urna" class="space-y-6">
+            
+            <!-- Active Election Title Banner -->
+            <div class="bg-slate-800/80 backdrop-blur rounded-2xl p-4 border border-slate-700/60 flex items-center justify-between flex-wrap gap-4">
+                <div class="flex items-center gap-3">
+                    <span class="inline-flex items-center justify-center w-3 h-3 rounded-full bg-emerald-500 animate-ping"></span>
+                    <div>
+                        <span class="text-xs uppercase tracking-wider font-bold text-emerald-400">Votação Ativa</span>
+                        <h2 id="active-election-title" class="text-xl font-bold text-white">Carregando votação...</h2>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button onclick="copyShareLink()" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-xs font-semibold text-emerald-300 transition flex items-center gap-2">
+                        <i class="fa-solid fa-link"></i>
+                        <span>Copiar Link de Voto</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Urna Hardware Simulator Shell -->
+            <div class="bg-slate-800 p-4 sm:p-8 rounded-3xl border-4 border-slate-700 shadow-2xl grid grid-cols-1 lg:grid-cols-12 gap-8 items-start relative overflow-hidden">
+                
+                <!-- Justiça Eleitoral Header Badge inside hardware -->
+                <div class="lg:col-span-12 flex items-center justify-between border-b border-slate-700 pb-3 mb-2">
+                    <div class="flex items-center gap-2 text-slate-300">
+                        <i class="fa-solid fa-building-columns text-emerald-400"></i>
+                        <span class="font-bold text-sm tracking-widest uppercase font-title">Justiça Eleitoral • Brasil</span>
+                    </div>
+                    <span id="voter-status-badge" class="px-2.5 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded-full text-xs font-medium">
+                        Dispositivo Autorizado
+                    </span>
+                </div>
+
+                <!-- LEFT: URNA SCREEN DISPLAY -->
+                <div class="lg:col-span-7 bg-[#e2e8f0] text-slate-900 rounded-2xl p-4 sm:p-6 shadow-inner border-2 border-slate-400 min-h-[380px] sm:min-h-[420px] flex flex-col justify-between relative overflow-hidden font-urna-digital select-none">
+                    <div class="urna-screen-overlay absolute inset-0 pointer-events-none"></div>
+
+                    <!-- SCREEN CONTENT CONTAINERS -->
+                    
+                    <!-- 1. ALREADY VOTED / BLOCKED DISPLAY -->
+                    <div id="screen-voted-block" class="hidden my-auto text-center space-y-4 py-8">
+                        <div class="w-16 h-16 bg-amber-500/20 text-amber-600 rounded-full flex items-center justify-center mx-auto text-3xl">
+                            <i class="fa-solid fa-user-check"></i>
+                        </div>
+                        <h3 class="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight">VOCÊ JÁ VOTOU!</h3>
+                        <p class="text-slate-600 max-w-sm mx-auto text-sm font-sans">
+                            Seu voto já foi registrado com sucesso nesta eleição através deste dispositivo. Não é possível votar mais de uma vez.
+                        </p>
+                        <div class="pt-4">
+                            <button onclick="switchTab('resultados')" class="px-5 py-2.5 bg-slate-800 hover:bg-slate-900 text-white font-sans text-sm font-semibold rounded-xl transition shadow-lg">
+                                <i class="fa-solid fa-chart-line mr-2"></i>Ver Resultados Ao Vivo
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 2. FIM SCREEN DISPLAY -->
+                    <div id="screen-fim" class="hidden my-auto text-center py-12">
+                        <h2 class="text-6xl sm:text-8xl font-black tracking-widest text-slate-900 animate-fim">FIM</h2>
+                        <p class="text-slate-600 mt-4 text-lg font-sans font-medium">Voto Gravado com Sucesso</p>
+                    </div>
+
+                    <!-- 3. ACTIVE VOTING SCREEN DISPLAY -->
+                    <div id="screen-voting-active" class="flex flex-col justify-between h-full space-y-4">
+                        
+                        <!-- Top Header -->
+                        <div class="border-b-2 border-slate-400 pb-2 flex justify-between items-end">
+                            <div>
+                                <p class="text-xs uppercase font-bold text-slate-600">SEU VOTO VAI PARA</p>
+                                <p id="urna-cargo-title" class="text-xl sm:text-2xl font-bold text-slate-900 uppercase">PRESIDENTE</p>
+                            </div>
+                            <div class="text-right">
+                                <span class="text-xs text-slate-500 font-mono">ELEIÇÕES ONLINE</span>
+                            </div>
+                        </div>
+
+                        <!-- Middle Content: Candidate details & Photo -->
+                        <div class="grid grid-cols-12 gap-4 my-auto items-center">
+                            <!-- Left Detail Fields -->
+                            <div class="col-span-8 space-y-3">
+                                
+                                <!-- Number Digit Boxes -->
+                                <div>
+                                    <span class="text-xs font-semibold text-slate-600 block mb-1">Número:</span>
+                                    <div id="number-boxes-container" class="flex gap-2">
+                                        <!-- Boxes inserted dynamically -->
+                                    </div>
+                                </div>
+
+                                <!-- Candidate Name Field -->
+                                <div id="field-candidate-name" class="min-h-[42px]">
+                                    <span class="text-xs text-slate-500 block">Nome:</span>
+                                    <span id="label-candidate-name" class="text-lg sm:text-xl font-bold text-slate-900 uppercase leading-none">
+                                        - - - - - - -
+                                    </span>
+                                </div>
+
+                                <!-- Party / Subtitle Field -->
+                                <div id="field-candidate-party" class="min-h-[32px]">
+                                    <span class="text-xs text-slate-500 block">Partido / Legenda:</span>
+                                    <span id="label-candidate-party" class="text-sm font-semibold text-slate-700 uppercase">
+                                        - - -
+                                    </span>
+                                </div>
+
+                            </div>
+
+                            <!-- Right Candidate Photo Box -->
+                            <div class="col-span-4 flex flex-col items-center justify-center">
+                                <div id="candidate-photo-box" class="w-24 h-28 sm:w-28 sm:h-36 bg-slate-300 border-2 border-slate-400 rounded-lg overflow-hidden flex items-center justify-center relative shadow-sm">
+                                    <i id="candidate-photo-placeholder" class="fa-solid fa-user text-4xl text-slate-400"></i>
+                                    <img id="candidate-photo-img" src="" alt="Candidato" class="w-full h-full object-cover hidden" onerror="this.classList.add('hidden'); document.getElementById('candidate-photo-placeholder').classList.remove('hidden');" />
+                                </div>
+                                <span id="label-photo-caption" class="text-[10px] text-slate-500 uppercase font-bold mt-1">Fotos do Candidato</span>
+                            </div>
+                        </div>
+
+                        <!-- Bottom Screen Instructions -->
+                        <div class="border-t-2 border-slate-400 pt-2 text-xs text-slate-700 font-sans space-y-0.5">
+                            <p class="font-bold uppercase text-[11px] text-slate-800">Aperte a tecla:</p>
+                            <p class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-emerald-600 inline-block"></span> <strong>CONFIRMA</strong> para CONFIRMAR este voto</p>
+                            <p class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-orange-500 inline-block"></span> <strong>CORRIGE</strong> para REINICIAR este voto</p>
+                        </div>
+
+                    </div>
+                </div>
+
+                <!-- RIGHT: PHYSICAL-STYLE URNA KEYPAD -->
+                <div class="lg:col-span-5 bg-neutral-900 p-5 rounded-2xl border-2 border-neutral-700 flex flex-col justify-between space-y-6 shadow-xl">
+                    
+                    <div class="text-center border-b border-neutral-800 pb-2">
+                        <span class="text-xs text-neutral-400 tracking-widest font-bold uppercase font-title">Teclado Numérico</span>
+                    </div>
+
+                    <!-- Numbers 1-9 & 0 -->
+                    <div class="grid grid-cols-3 gap-3 sm:gap-4 max-w-xs mx-auto w-full">
+                        <button onclick="pressKey('1')" class="btn-keypad bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-2xl sm:text-3xl rounded-xl py-3 border-b-4 border-neutral-950 flex items-center justify-center">1</button>
+                        <button onclick="pressKey('2')" class="btn-keypad bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-2xl sm:text-3xl rounded-xl py-3 border-b-4 border-neutral-950 flex items-center justify-center">2</button>
+                        <button onclick="pressKey('3')" class="btn-keypad bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-2xl sm:text-3xl rounded-xl py-3 border-b-4 border-neutral-950 flex items-center justify-center">3</button>
+                        <button onclick="pressKey('4')" class="btn-keypad bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-2xl sm:text-3xl rounded-xl py-3 border-b-4 border-neutral-950 flex items-center justify-center">4</button>
+                        <button onclick="pressKey('5')" class="btn-keypad bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-2xl sm:text-3xl rounded-xl py-3 border-b-4 border-neutral-950 flex items-center justify-center">5</button>
+                        <button onclick="pressKey('6')" class="btn-keypad bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-2xl sm:text-3xl rounded-xl py-3 border-b-4 border-neutral-950 flex items-center justify-center">6</button>
+                        <button onclick="pressKey('7')" class="btn-keypad bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-2xl sm:text-3xl rounded-xl py-3 border-b-4 border-neutral-950 flex items-center justify-center">7</button>
+                        <button onclick="pressKey('8')" class="btn-keypad bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-2xl sm:text-3xl rounded-xl py-3 border-b-4 border-neutral-950 flex items-center justify-center">8</button>
+                        <button onclick="pressKey('9')" class="btn-keypad bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-2xl sm:text-3xl rounded-xl py-3 border-b-4 border-neutral-950 flex items-center justify-center">9</button>
+                        <div class="col-start-2">
+                            <button onclick="pressKey('0')" class="btn-keypad w-full bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-2xl sm:text-3xl rounded-xl py-3 border-b-4 border-neutral-950 flex items-center justify-center">0</button>
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons: BRANCO, CORRIGE, CONFIRMA -->
+                    <div class="grid grid-cols-3 gap-2 sm:gap-3 pt-2">
+                        <button onclick="pressBranco()" class="btn-keypad bg-slate-100 hover:bg-slate-200 text-slate-950 font-bold text-xs sm:text-sm uppercase py-4 rounded-xl border-b-4 border-slate-300 shadow">
+                            BRANCO
+                        </button>
+                        <button onclick="pressCorrige()" class="btn-keypad bg-orange-600 hover:bg-orange-500 text-white font-bold text-xs sm:text-sm uppercase py-4 rounded-xl border-b-4 border-orange-800 shadow">
+                            CORRIGE
+                        </button>
+                        <button onclick="pressConfirma()" class="btn-keypad bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs sm:text-sm uppercase py-4 rounded-xl border-b-4 border-emerald-800 shadow">
+                            CONFIRMA
+                        </button>
+                    </div>
+
+                </div>
+
+            </div>
+        </section>
+
+        <!-- VIEW 2: CREATE ELECTION FORM -->
+        <section id="view-criar" class="hidden space-y-6 max-w-4xl mx-auto">
+            <div class="bg-slate-800 border border-slate-700 rounded-3xl p-6 sm:p-8 shadow-xl space-y-6">
+                <div>
+                    <h2 class="text-2xl font-bold font-title text-white flex items-center gap-2">
+                        <i class="fa-solid fa-plus-circle text-emerald-400"></i>
+                        Criar Nova Votação
+                    </h2>
+                    <p class="text-sm text-slate-400 mt-1">Configure os dados da eleição e cadastre os candidatos para gerar o link público.</p>
+                </div>
+
+                <form id="form-create-election" onsubmit="handleCreateElection(event)" class="space-y-6">
+                    <!-- Election Title & Cargo -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-300 uppercase mb-2">Título da Eleição / Evento</label>
+                            <input type="text" id="input-election-title" required placeholder="Ex: Eleição da Galera 2026" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500 transition" />
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-300 uppercase mb-2">Cargo / Função</label>
+                            <input type="text" id="input-election-cargo" required value="PRESIDENTE" placeholder="Ex: Líder de Turma" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500 transition" />
+                        </div>
+                    </div>
+
+                    <!-- Number Digits setting -->
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-300 uppercase mb-2">Dígitos do Número do Candidato</label>
+                        <select id="select-number-digits" class="w-full sm:w-48 bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500 transition">
+                            <option value="2">2 Dígitos (Ex: 13, 22, 10)</option>
+                            <option value="3">3 Dígitos (Ex: 101, 555)</option>
+                            <option value="4">4 Dígitos (Ex: 1001, 2026)</option>
+                        </select>
+                    </div>
+
+                    <!-- Candidate List Header -->
+                    <div class="border-t border-slate-700 pt-6">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                                <i class="fa-solid fa-users text-emerald-400"></i> Candidatos
+                            </h3>
+                            <button type="button" onclick="addCandidateRow()" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-emerald-400 text-xs font-semibold rounded-lg transition flex items-center gap-1.5">
+                                <i class="fa-solid fa-plus"></i> Adicionar Candidato
+                            </button>
+                        </div>
+
+                        <!-- Candidates Container -->
+                        <div id="candidates-input-container" class="space-y-4">
+                            <!-- Dynamic Candidate Rows appended here -->
+                        </div>
+                    </div>
+
+                    <!-- Submit Button -->
+                    <div class="pt-4 flex justify-end">
+                        <button type="submit" id="btn-submit-election" class="w-full sm:w-auto px-8 py-3.5 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold text-base rounded-xl transition shadow-lg flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-rocket"></i>
+                            <span>Criar e Gerar Link</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </section>
+
+        <!-- VIEW 3: LIVE RESULTS DASHBOARD -->
+        <section id="view-resultados" class="hidden space-y-6">
+            
+            <!-- Dashboard Header -->
+            <div class="bg-slate-800 border border-slate-700 rounded-3xl p-6 shadow-xl flex items-center justify-between flex-wrap gap-4">
+                <div>
+                    <span class="text-xs uppercase font-bold text-emerald-400 flex items-center gap-1.5">
+                        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+                        Apuração em Tempo Real
+                    </span>
+                    <h2 id="results-election-title" class="text-2xl font-bold font-title text-white mt-1">Carregando Resultados...</h2>
+                </div>
+                
+                <div class="flex items-center gap-3">
+                    <div class="bg-slate-900 border border-slate-700 rounded-2xl px-4 py-2 text-right">
+                        <span class="text-[11px] text-slate-400 uppercase font-semibold block">Total de Votos</span>
+                        <span id="results-total-votes" class="text-2xl font-black text-emerald-400 font-title">0</span>
+                    </div>
+                    <button onclick="copyShareLink()" class="px-4 py-2 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 rounded-xl text-xs font-bold transition flex items-center gap-2">
+                        <i class="fa-solid fa-share-nodes"></i> Copiar Link
+                    </button>
+                </div>
+            </div>
+
+            <!-- Candidates Vote Bar List -->
+            <div id="results-candidates-list" class="grid grid-cols-1 gap-4">
+                <!-- Live candidate result cards loaded here -->
+            </div>
+
+            <!-- Summary Stats (Branco / Nulo) -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div class="bg-slate-800 border border-slate-700 rounded-2xl p-5 flex items-center justify-between">
+                    <div>
+                        <p class="text-xs text-slate-400 font-semibold uppercase">Votos em Branco</p>
+                        <h4 id="results-count-branco" class="text-2xl font-bold text-white font-title">0</h4>
+                    </div>
+                    <span id="results-percent-branco" class="text-sm font-bold text-slate-400 bg-slate-900 px-3 py-1 rounded-lg">0%</span>
+                </div>
+                <div class="bg-slate-800 border border-slate-700 rounded-2xl p-5 flex items-center justify-between">
+                    <div>
+                        <p class="text-xs text-slate-400 font-semibold uppercase">Votos Nulos</p>
+                        <h4 id="results-count-nulo" class="text-2xl font-bold text-white font-title">0</h4>
+                    </div>
+                    <span id="results-percent-nulo" class="text-sm font-bold text-slate-400 bg-slate-900 px-3 py-1 rounded-lg">0%</span>
+                </div>
+            </div>
+
+            <!-- List of Elections Saved -->
+            <div class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-5 space-y-3">
+                <h3 class="text-sm font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                    <i class="fa-solid fa-list-ul text-emerald-400"></i> Outras Eleições Salvas
+                </h3>
+                <div id="elections-history-list" class="flex flex-wrap gap-2 pt-1">
+                    <!-- Election selector pills -->
+                </div>
+            </div>
+
+        </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-slate-950 border-t border-slate-800 py-4 text-center text-xs text-slate-500">
+        <p>Urna Eletrônica Simulação Digital • Votação Segura com Sincronização Global em Tempo Real</p>
+    </footer>
+
+    <!-- Firebase Imports Module -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, addDoc, collection, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // APP GLOBAL CONSTANTS & FIREBASE CONFIG
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'urna-eletronica-app';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+            apiKey: "demo-key",
+            authDomain: "demo.firebaseapp.com",
+            projectId: "demo-project",
+            storageBucket: "demo.appspot.com",
+            messagingSenderId: "123456789",
+            appId: "1:123456789:web:demo"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // State Variables
+        let currentUser = null;
+        let currentElection = null;
+        let activeVotes = [];
+        let enteredDigits = "";
+        let isBranco = false;
+        let unsubscribeElection = null;
+        let unsubscribeVotes = null;
+
+        // Unique Device Voter Identifier
+        let voterDeviceId = localStorage.getItem('urna_voter_device_id');
+        if (!voterDeviceId) {
+            voterDeviceId = 'dev_' + Math.random().toString(36).substring(2, 11) + Date.now().toString(36);
+            localStorage.setItem('urna_voter_device_id', voterDeviceId);
+        }
+
+        /* Web Audio API Synthesizer for Authentic Urna Sound Effects */
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        function playKeyBeep() {
+            try {
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.08);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.08);
+            } catch(e) {}
+        }
+
+        function playFimSound() {
+            try {
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+                const now = audioCtx.currentTime;
+                
+                // Classic Brazilian Urna FIM Sound Tone
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(440, now);
+                osc.frequency.exponentialRampToValueAtTime(880, now + 0.6);
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.7);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(now);
+                osc.stop(now + 0.7);
+            } catch(e) {}
+        }
+
+        // Authentic Auth Handshake
+        async function initAuth() {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    const userCredential = await signInWithCustomToken(auth, __initial_auth_token);
+                    currentUser = userCredential.user;
+                } else {
+                    const userCredential = await signInAnonymously(auth);
+                    currentUser = userCredential.user;
+                }
+            } catch (err) {
+                console.warn("Auth initialization fallback:", err);
+            }
+        }
+
+        // Default Sample Candidates for quick initialization
+        const DEFAULT_CANDIDATES = [
+            {
+                number: "13",
+                name: "CARLOS SILVA",
+                party: "PARTIDO DA ESPERANÇA (PE)",
+                photo: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80"
+            },
+            {
+                number: "22",
+                name: "ANA OLIVEIRA",
+                party: "UNIÃO NACIONAL (UN)",
+                photo: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80"
+            }
+        ];
+
+        // Read Election ID from URL hash or search params
+        function getElectionIdFromURL() {
+            const hash = window.location.hash.replace('#', '').trim();
+            if (hash) return hash;
+            const params = new URLSearchParams(window.location.search);
+            return params.get('election') || null;
+        }
+
+        // Initialize App & Firestore Subscriptions
+        async function startApp() {
+            await initAuth();
+            
+            const targetElectionId = getElectionIdFromURL();
+            if (targetElectionId) {
+                loadElection(targetElectionId);
+            } else {
+                // Check if demo election exists or create one
+                loadOrCreateDefaultElection();
+            }
+            
+            setupHistoryList();
+        }
+
+        // Load Default Election if none provided
+        async function loadOrCreateDefaultElection() {
+            const defaultId = "eleicao_demo_2026";
+            const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'elections', defaultId);
+            
+            try {
+                const docSnap = await getDoc(docRef);
+                if (!docSnap.exists()) {
+                    await setDoc(docRef, {
+                        id: defaultId,
+                        title: "Eleição Demonstrativa 2026",
+                        cargo: "PRESIDENTE",
+                        digits: 2,
+                        candidates: DEFAULT_CANDIDATES,
+                        createdAt: new Date().toISOString()
+                    });
+                }
+                loadElection(defaultId);
+            } catch (err) {
+                console.error("Error loading default election:", err);
+                // Fallback local memory election
+                currentElection = {
+                    id: defaultId,
+                    title: "Eleição Demonstrativa",
+                    cargo: "PRESIDENTE",
+                    digits: 2,
+                    candidates: DEFAULT_CANDIDATES
+                };
+                renderUrnaScreen();
+            }
+        }
+
+        // Realtime Subscription to Election Doc & Votes Collection
+        function loadElection(electionId) {
+            // Unsubscribe existing listeners
+            if (unsubscribeElection) unsubscribeElection();
+            if (unsubscribeVotes) unsubscribeVotes();
+
+            window.location.hash = electionId;
+
+            // 1. Listen to Election Metadata
+            const electionRef = doc(db, 'artifacts', appId, 'public', 'data', 'elections', electionId);
+            unsubscribeElection = onSnapshot(electionRef, (snap) => {
+                if (snap.exists()) {
+                    currentElection = snap.data();
+                    document.getElementById('active-election-title').textContent = currentElection.title;
+                    document.getElementById('urna-cargo-title').textContent = currentElection.cargo || "PRESIDENTE";
+                    renderUrnaScreen();
+                    updateResultsUI();
+                } else {
+                    showToast("Eleição não encontrada! Carregando padrão...", "warning");
+                    loadOrCreateDefaultElection();
+                }
+            }, (err) => console.error("Election snapshot error:", err));
+
+            // 2. Listen to Votes Collection (Rule 2: simple query)
+            const votesColRef = collection(db, 'artifacts', appId, 'public', 'data', 'votes');
+            unsubscribeVotes = onSnapshot(votesColRef, (snap) => {
+                const allVotes = [];
+                snap.forEach(doc => {
+                    const data = doc.data();
+                    if (data.electionId === electionId) {
+                        allVotes.push(data);
+                    }
+                });
+                activeVotes = allVotes;
+                checkVoterStatus();
+                updateResultsUI();
+            }, (err) => console.error("Votes snapshot error:", err));
+        }
+
+        // Check if device has already voted in current election
+        function checkVoterStatus() {
+            if (!currentElection) return;
+            
+            const localVoted = localStorage.getItem(`voted_${currentElection.id}`);
+            const hasVotedInFirestore = activeVotes.some(v => v.voterDeviceId === voterDeviceId);
+
+            const isBlocked = localVoted || hasVotedInFirestore;
+            
+            const screenBlock = document.getElementById('screen-voted-block');
+            const screenActive = document.getElementById('screen-voting-active');
+            const screenFim = document.getElementById('screen-fim');
+            const badge = document.getElementById('voter-status-badge');
+
+            if (isBlocked && screenFim.classList.contains('hidden')) {
+                screenActive.classList.add('hidden');
+                screenBlock.classList.remove('hidden');
+                badge.className = "px-2.5 py-1 bg-amber-500/10 text-amber-400 border border-amber-500/30 rounded-full text-xs font-medium";
+                badge.textContent = "Voto Computado";
+            } else if (!isBlocked) {
+                if (screenFim.classList.contains('hidden')) {
+                    screenActive.classList.remove('hidden');
+                    screenBlock.classList.add('hidden');
+                }
+                badge.className = "px-2.5 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded-full text-xs font-medium";
+                badge.textContent = "Dispositivo Autorizado";
+            }
+        }
+
+        // Render Urna Number Digit Boxes & Info
+        function renderUrnaScreen() {
+            if (!currentElection) return;
+
+            const digitsCount = currentElection.digits || 2;
+            const container = document.getElementById('number-boxes-container');
+            container.innerHTML = '';
+
+            for (let i = 0; i < digitsCount; i++) {
+                const box = document.createElement('div');
+                const digitChar = enteredDigits[i] || '';
+                const isCurrent = (i === enteredDigits.length && !isBranco);
+                
+                box.className = `w-10 h-12 sm:w-12 sm:h-14 border-2 flex items-center justify-center font-bold text-2xl sm:text-3xl bg-white rounded-lg transition-all ${
+                    isCurrent ? 'border-emerald-600 ring-2 ring-emerald-400 animate-pulse' : 'border-slate-400'
+                } ${digitChar ? 'text-slate-950' : 'text-slate-300'}`;
+                
+                box.textContent = digitChar;
+                container.appendChild(box);
+            }
+
+            // Find matching candidate
+            const labelName = document.getElementById('label-candidate-name');
+            const labelParty = document.getElementById('label-candidate-party');
+            const imgPhoto = document.getElementById('candidate-photo-img');
+            const placeholderPhoto = document.getElementById('candidate-photo-placeholder');
+
+            if (isBranco) {
+                labelName.textContent = "VOTO EM BRANCO";
+                labelName.className = "text-xl font-black text-amber-600 uppercase";
+                labelParty.textContent = "NENHUMA LEGENDA SELECIONADA";
+                imgPhoto.classList.add('hidden');
+                placeholderPhoto.classList.remove('hidden');
+                return;
+            }
+
+            if (enteredDigits.length === digitsCount) {
+                const candidate = currentElection.candidates.find(c => c.number === enteredDigits);
+                if (candidate) {
+                    labelName.textContent = candidate.name;
+                    labelName.className = "text-lg sm:text-xl font-bold text-slate-900 uppercase";
+                    labelParty.textContent = candidate.party || "PARTIDO INDEPENDENTE";
+                    
+                    if (candidate.photo) {
+                        imgPhoto.src = candidate.photo;
+                        imgPhoto.classList.remove('hidden');
+                        placeholderPhoto.classList.add('hidden');
+                    } else {
+                        imgPhoto.classList.add('hidden');
+                        placeholderPhoto.classList.remove('hidden');
+                    }
+                } else {
+                    labelName.textContent = "VOTO NULO";
+                    labelName.className = "text-xl font-black text-red-600 uppercase";
+                    labelParty.textContent = "NÚMERO NÃO CADASTRADO";
+                    imgPhoto.classList.add('hidden');
+                    placeholderPhoto.classList.remove('hidden');
+                }
+            } else {
+                labelName.textContent = "- - - - - - -";
+                labelName.className = "text-lg sm:text-xl font-bold text-slate-900 uppercase";
+                labelParty.textContent = "- - -";
+                imgPhoto.classList.add('hidden');
+                placeholderPhoto.classList.remove('hidden');
+            }
+        }
+
+        /* KEYPAD ACTIONS */
+        window.pressKey = function(digit) {
+            playKeyBeep();
+            if (isBranco) return; // Must press CORRIGE first if in BRANCO
+            const maxDigits = currentElection ? (currentElection.digits || 2) : 2;
+            if (enteredDigits.length < maxDigits) {
+                enteredDigits += digit;
+                renderUrnaScreen();
+            }
+        };
+
+        window.pressBranco = function() {
+            playKeyBeep();
+            enteredDigits = "";
+            isBranco = true;
+            renderUrnaScreen();
+        };
+
+        window.pressCorrige = function() {
+            playKeyBeep();
+            enteredDigits = "";
+            isBranco = false;
+            renderUrnaScreen();
+        };
+
+        window.pressConfirma = async function() {
+            if (!currentElection) return;
+
+            const maxDigits = currentElection.digits || 2;
+            
+            // Validate vote completion
+            if (!isBranco && enteredDigits.length < maxDigits) {
+                showToast(`Por favor, digite os ${maxDigits} números antes de confirmar!`, "warning");
+                return;
+            }
+
+            // Determine vote type
+            let candidateNumber = "NULO";
+            if (isBranco) {
+                candidateNumber = "BRANCO";
+            } else {
+                const match = currentElection.candidates.find(c => c.number === enteredDigits);
+                if (match) {
+                    candidateNumber = match.number;
+                }
+            }
+
+            // Save vote to Firestore
+            try {
+                const voteData = {
+                    electionId: currentElection.id,
+                    candidateNumber: candidateNumber,
+                    voterDeviceId: voterDeviceId,
+                    timestamp: new Date().toISOString()
+                };
+
+                const votesColRef = collection(db, 'artifacts', appId, 'public', 'data', 'votes');
+                await addDoc(votesColRef, voteData);
+
+                // Lock device locally
+                localStorage.setItem(`voted_${currentElection.id}`, 'true');
+
+                // Play Urna FIM sound
+                playFimSound();
+
+                // Show FIM screen animation
+                document.getElementById('screen-voting-active').classList.add('hidden');
+                document.getElementById('screen-fim').classList.remove('hidden');
+
+                // After 2.5s transition to blocked state
+                setTimeout(() => {
+                    document.getElementById('screen-fim').classList.add('hidden');
+                    checkVoterStatus();
+                }, 2500);
+
+            } catch (err) {
+                console.error("Error submitting vote:", err);
+                showToast("Erro ao registrar voto. Verifique a conexão.", "error");
+            }
+        };
+
+        /* UPDATE RESULTS DASHBOARD */
+        function updateResultsUI() {
+            if (!currentElection) return;
+
+            document.getElementById('results-election-title').textContent = currentElection.title;
+
+            const totalVotes = activeVotes.length;
+            document.getElementById('results-total-votes').textContent = totalVotes;
+
+            let countBranco = 0;
+            let countNulo = 0;
+            const candidateCounts = {};
+
+            currentElection.candidates.forEach(c => {
+                candidateCounts[c.number] = 0;
+            });
+
+            activeVotes.forEach(vote => {
+                if (vote.candidateNumber === 'BRANCO') {
+                    countBranco++;
+                } else if (vote.candidateNumber === 'NULO') {
+                    countNulo++;
+                } else if (candidateCounts[vote.candidateNumber] !== undefined) {
+                    candidateCounts[vote.candidateNumber]++;
+                } else {
+                    countNulo++;
+                }
+            });
+
+            // Update Branco / Nulo stats
+            document.getElementById('results-count-branco').textContent = countBranco;
+            document.getElementById('results-percent-branco').textContent = totalVotes > 0 ? ((countBranco / totalVotes) * 100).toFixed(1) + '%' : '0%';
+            
+            document.getElementById('results-count-nulo').textContent = countNulo;
+            document.getElementById('results-percent-nulo').textContent = totalVotes > 0 ? ((countNulo / totalVotes) * 100).toFixed(1) + '%' : '0%';
+
+            // Render Candidate Results Cards sorted by highest votes
+            const listContainer = document.getElementById('results-candidates-list');
+            listContainer.innerHTML = '';
+
+            const sortedCandidates = [...currentElection.candidates].sort((a, b) => {
+                return (candidateCounts[b.number] || 0) - (candidateCounts[a.number] || 0);
+            });
+
+            sortedCandidates.forEach((candidate, index) => {
+                const votes = candidateCounts[candidate.number] || 0;
+                const percent = totalVotes > 0 ? ((votes / totalVotes) * 100).toFixed(1) : '0.0';
+                const isLeader = index === 0 && votes > 0;
+
+                const card = document.createElement('div');
+                card.className = `bg-slate-800 border ${isLeader ? 'border-emerald-500 ring-1 ring-emerald-500/30' : 'border-slate-700'} rounded-2xl p-4 sm:p-5 shadow-lg space-y-3 relative overflow-hidden`;
+
+                card.innerHTML = `
+                    <div class="flex items-center justify-between gap-4">
+                        <div class="flex items-center gap-3">
+                            <div class="w-12 h-12 bg-slate-700 rounded-xl overflow-hidden flex-shrink-0 border border-slate-600 flex items-center justify-center">
+                                ${candidate.photo ? `<img src="${candidate.photo}" class="w-full h-full object-cover"/>` : `<i class="fa-solid fa-user text-slate-400 text-xl"></i>`}
+                            </div>
+                            <div>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-xs font-black bg-slate-900 text-emerald-400 px-2 py-0.5 rounded font-mono border border-slate-700">Nº ${candidate.number}</span>
+                                    ${isLeader ? `<span class="bg-emerald-500/20 text-emerald-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-500/30 uppercase"><i class="fa-solid fa-trophy text-[9px] mr-1"></i>Líder</span>` : ''}
+                                </div>
+                                <h4 class="text-base sm:text-lg font-bold text-white uppercase mt-0.5 leading-snug">${candidate.name}</h4>
+                                <p class="text-xs text-slate-400">${candidate.party || 'Partido Independente'}</p>
+                            </div>
+                        </div>
+
+                        <div class="text-right">
+                            <span class="text-2xl sm:text-3xl font-black text-white font-title">${votes}</span>
+                            <span class="text-xs text-slate-400 block">${percent}%</span>
+                        </div>
+                    </div>
+
+                    <!-- Progress Bar -->
+                    <div class="w-full bg-slate-900 h-3 rounded-full overflow-hidden p-0.5 border border-slate-700/50">
+                        <div class="bg-emerald-500 h-full rounded-full transition-all duration-500" style="width: ${percent}%"></div>
+                    </div>
+                `;
+                listContainer.appendChild(card);
+            });
+        }
+
+        /* ELECTION CREATION FORM HANDLER */
+        let candidateRowCounter = 0;
+
+        window.addCandidateRow = function(number = '', name = '', party = '', photo = '') {
+            candidateRowCounter++;
+            const container = document.getElementById('candidates-input-container');
+            
+            const row = document.createElement('div');
+            row.id = `cand-row-${candidateRowCounter}`;
+            row.className = "bg-slate-900 border border-slate-700 p-4 rounded-2xl space-y-3 relative group";
+
+            row.innerHTML = `
+                <div class="flex justify-between items-center pb-2 border-b border-slate-800">
+                    <span class="text-xs font-bold text-slate-400 uppercase">Candidato ${candidateRowCounter}</span>
+                    <button type="button" onclick="removeCandidateRow('cand-row-${candidateRowCounter}')" class="text-slate-500 hover:text-red-400 text-xs transition">
+                        <i class="fa-solid fa-trash-can"></i> Remover
+                    </button>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                    <div class="sm:col-span-3">
+                        <label class="block text-[11px] font-semibold text-slate-400 mb-1 uppercase">Número</label>
+                        <input type="text" maxlength="4" required value="${number}" placeholder="Ex: 13" class="cand-number w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm font-bold font-mono focus:outline-none focus:border-emerald-500" />
+                    </div>
+                    <div class="sm:col-span-5">
+                        <label class="block text-[11px] font-semibold text-slate-400 mb-1 uppercase">Nome Completo</label>
+                        <input type="text" required value="${name}" placeholder="Ex: Maria Santos" class="cand-name w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm uppercase focus:outline-none focus:border-emerald-500" />
+                    </div>
+                    <div class="sm:col-span-4">
+                        <label class="block text-[11px] font-semibold text-slate-400 mb-1 uppercase">Partido / Legenda</label>
+                        <input type="text" value="${party}" placeholder="Ex: Partido do Povo" class="cand-party w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500" />
+                    </div>
+                    <div class="sm:col-span-12">
+                        <label class="block text-[11px] font-semibold text-slate-400 mb-1 uppercase">URL da Foto (Opcional)</label>
+                        <input type="url" value="${photo}" placeholder="https://exemplo.com/foto.jpg" class="cand-photo w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:border-emerald-500" />
+                    </div>
+                </div>
+            `;
+            container.appendChild(row);
+        };
+
+        window.removeCandidateRow = function(rowId) {
+            const row = document.getElementById(rowId);
+            if (row) row.remove();
+        };
+
+        // Pre-fill creator form with default template
+        function setupCreatorFormDefaults() {
+            const container = document.getElementById('candidates-input-container');
+            container.innerHTML = '';
+            candidateRowCounter = 0;
+            
+            addCandidateRow("13", "CARLOS SILVA", "PARTIDO DA ESPERANÇA (PE)", "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80");
+            addCandidateRow("22", "ANA OLIVEIRA", "UNIÃO NACIONAL (UN)", "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80");
+        }
+
+        window.handleCreateElection = async function(event) {
+            event.preventDefault();
+            const btn = document.getElementById('btn-submit-election');
+            btn.disabled = true;
+            btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> Criando...`;
+
+            try {
+                const title = document.getElementById('input-election-title').value.trim();
+                const cargo = document.getElementById('input-election-cargo').value.trim();
+                const digits = parseInt(document.getElementById('select-number-digits').value, 10);
+
+                const candidateRows = document.querySelectorAll('#candidates-input-container > div');
+                const candidates = [];
+
+                candidateRows.forEach(row => {
+                    const number = row.querySelector('.cand-number').value.trim();
+                    const name = row.querySelector('.cand-name').value.trim().toUpperCase();
+                    const party = row.querySelector('.cand-party').value.trim().toUpperCase();
+                    const photo = row.querySelector('.cand-photo').value.trim();
+
+                    if (number && name) {
+                        candidates.push({ number, name, party, photo });
+                    }
+                });
+
+                if (candidates.length === 0) {
+                    showToast("Adicione pelo menos 1 candidato!", "warning");
+                    btn.disabled = false;
+                    btn.innerHTML = `<i class="fa-solid fa-rocket"></i> Criar e Gerar Link`;
+                    return;
+                }
+
+                const newElectionId = 'eleicao_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 6);
+                
+                const electionDoc = {
+                    id: newElectionId,
+                    title: title,
+                    cargo: cargo,
+                    digits: digits,
+                    candidates: candidates,
+                    createdAt: new Date().toISOString()
+                };
+
+                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'elections', newElectionId);
+                await setDoc(docRef, electionDoc);
+
+                showToast("Eleição criada com sucesso!", "success");
+                btn.disabled = false;
+                btn.innerHTML = `<i class="fa-solid fa-rocket"></i> Criar e Gerar Link`;
+
+                // Load newly created election
+                loadElection(newElectionId);
+                switchTab('urna');
+                copyShareLink();
+
+            } catch (err) {
+                console.error("Error creating election:", err);
+                showToast("Erro ao criar eleição.", "error");
+                btn.disabled = false;
+                btn.innerHTML = `<i class="fa-solid fa-rocket"></i> Criar e Gerar Link`;
+            }
+        };
+
+        // Share Link Generator & Clipboard Copy
+        window.copyShareLink = function() {
+            if (!currentElection) return;
+            const link = `${window.location.origin}${window.location.pathname}#${currentElection.id}`;
+            
+            // Clipboard Fallback as per instructions
+            const tempInput = document.createElement('input');
+            tempInput.value = link;
+            document.body.appendChild(tempInput);
+            tempInput.select();
+            document.execCommand('copy');
+            document.body.removeChild(tempInput);
+
+            showToast("Link da votação copiado! Envie para quem for votar.", "success");
+        };
+
+        // Navigation Tabs Controller
+        window.switchTab = function(tabName) {
+            document.getElementById('view-urna').classList.add('hidden');
+            document.getElementById('view-criar').classList.add('hidden');
+            document.getElementById('view-resultados').classList.add('hidden');
+
+            document.getElementById('nav-btn-urna').className = "px-4 py-2 rounded-lg font-semibold text-sm text-slate-300 hover:bg-slate-800 transition flex items-center gap-2";
+            document.getElementById('nav-btn-criar').className = "px-4 py-2 rounded-lg font-semibold text-sm text-slate-300 hover:bg-slate-800 transition flex items-center gap-2";
+            document.getElementById('nav-btn-resultados').className = "px-4 py-2 rounded-lg font-semibold text-sm text-slate-300 hover:bg-slate-800 transition flex items-center gap-2";
+
+            if (tabName === 'urna') {
+                document.getElementById('view-urna').classList.remove('hidden');
+                document.getElementById('nav-btn-urna').className = "px-4 py-2 rounded-lg font-semibold text-sm transition flex items-center gap-2 bg-emerald-600 text-white shadow-md";
+            } else if (tabName === 'criar') {
+                document.getElementById('view-criar').classList.remove('hidden');
+                document.getElementById('nav-btn-criar').className = "px-4 py-2 rounded-lg font-semibold text-sm transition flex items-center gap-2 bg-emerald-600 text-white shadow-md";
+            } else if (tabName === 'resultados') {
+                document.getElementById('view-resultados').classList.remove('hidden');
+                document.getElementById('nav-btn-resultados').className = "px-4 py-2 rounded-lg font-semibold text-sm transition flex items-center gap-2 bg-emerald-600 text-white shadow-md";
+            }
+        };
+
+        window.goHome = function() {
+            switchTab('urna');
+        };
+
+        // Toast Popup Helper
+        function showToast(message, type = "info") {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            
+            const bgClass = type === 'success' ? 'bg-emerald-600 text-white' :
+                            type === 'warning' ? 'bg-amber-600 text-white' :
+                            type === 'error' ? 'bg-red-600 text-white' : 'bg-slate-800 text-white border border-slate-700';
+
+            toast.className = `px-4 py-3 rounded-xl shadow-2xl font-semibold text-xs sm:text-sm flex items-center gap-2 transition-all transform translate-y-2 opacity-0 pointer-events-auto ${bgClass}`;
+            toast.innerHTML = `<i class="fa-solid ${type === 'success' ? 'fa-circle-check' : 'fa-circle-info'}"></i> <span>${message}</span>`;
+            
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.classList.remove('translate-y-2', 'opacity-0');
+            }, 10);
+
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            }, 3500);
+        }
+
+        // Setup History Elections Pills
+        function setupHistoryList() {
+            const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'elections');
+            onSnapshot(colRef, (snap) => {
+                const historyContainer = document.getElementById('elections-history-list');
+                historyContainer.innerHTML = '';
+
+                snap.forEach(docSnap => {
+                    const data = docSnap.data();
+                    const pill = document.createElement('button');
+                    pill.className = `px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${
+                        currentElection && currentElection.id === data.id
+                        ? 'bg-emerald-600/30 border-emerald-500 text-emerald-300'
+                        : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-white'
+                    }`;
+                    pill.textContent = data.title;
+                    pill.onclick = () => loadElection(data.id);
+                    historyContainer.appendChild(pill);
+                });
+            }, (err) => console.error("History listener error:", err));
+        }
+
+        // Window Load Initializer
+        window.onload = function() {
+            setupCreatorFormDefaults();
+            startApp();
+        };
+
+    </script>
+</body>
+</html>
